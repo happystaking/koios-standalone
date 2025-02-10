@@ -1,0 +1,7 @@
+[Unit]
+Description=Koios Active Stake Cache and Epoch Info Cache Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/active-stake-cache-update.sh
+ExecStart=/usr/local/bin/koios/epoch-info-cache-update.sh

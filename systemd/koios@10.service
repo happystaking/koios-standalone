@@ -1,0 +1,8 @@
+[Unit]
+Description=Koios Asset Registry, Pool History and Next Epoch Nonce
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/asset-registry-update.sh
+ExecStart=/usr/local/bin/koios/pool-history-cache-update.sh
+ExecStart=/usr/local/bin/koios/populate-next-epoch-nonce.sh

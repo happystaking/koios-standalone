@@ -1,0 +1,6 @@
+[Unit]
+Description=Koios Stake Distribution Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/stake-distribution-update.sh

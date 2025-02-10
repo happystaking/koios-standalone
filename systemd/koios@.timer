@@ -1,0 +1,10 @@
+[Unit]
+Description=Koios DB Update Timer (every %i min)
+
+[Timer]
+OnCalendar=*:0/%i:0
+Unit=koios@%i.service
+RandomizedDelaySec=8
+
+[Install]
+WantedBy=timers.target

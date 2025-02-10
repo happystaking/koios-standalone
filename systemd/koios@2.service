@@ -1,0 +1,6 @@
+[Unit]
+Description=Koios Asset Info Cache Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/asset-info-cache-update.sh

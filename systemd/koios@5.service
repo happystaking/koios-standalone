@@ -1,0 +1,6 @@
+[Unit]
+Description=Koios CLI Protocol Params Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/cli-protocol-params-update.sh
