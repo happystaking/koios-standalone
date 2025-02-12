@@ -9,7 +9,7 @@ function cmdStatus () { if [[ $? -eq 0 ]]; then echo $1; else exit 1; fi; }
 
 # Script execution
 echo "
-This script depends on the koios-artifacts GitHub repository and it's only meant to create the final configuration to become a Koios instance provider.
+This script is meant to create the final configuration to become a Koios instance provider and depends on koios-artifacts and guild-operators repositories to do so.
 It is intended for use on Debian-based systems where all Koios dependencies (cardano-node, postgresql, db-sync, submit-api, etc.) have been independently installed.
 Before you proceed, please ensure that:
 
@@ -26,14 +26,18 @@ In case pg_bech32 needs to be installed the script will install a few packages t
 autoCardanoMetricsUrl=$(sudo netstat -tupln | grep 12798 | awk '{print $4}' | head -n 1)
 autoSubmitApiUrl=$(sudo netstat -tupln | grep 8090 | awk '{print $4}' | head -n 1)
 autoOgmiosUrl=$(sudo netstat -tupln | grep 1337 | awk '{print $4}' | head -n 1)
+autoDbSyncMetricsAddr=$(sudo netstat -tulpn | grep cardano-node | awk '{print $4}' | grep 0\.0\.0\.0 | cut -d ":" -f 1)
+autoDbSyncMetricsPort=$(sudo netstat -tulpn | grep cardano-db-sync | awk '{print $4}' | grep 0\.0\.0\.0 | cut -d ":" -f 2)
 
-echo "Cardano Node environment"
+echo "Cardano Node and DB-Sync environments"
 cardanoCliPath=$(askDefault " Path to cardano-cli" "`which cardano-cli`")
 cardanoSocketPath=$(askDefault " Path to node.socket" "/var/lib/cardano/mainnet/node.socket")
 cardanoMetricsUrl=$(askDefault " Metrics URL for cardano-node" "http://${autoCardanoMetricsUrl/0.0.0.0/127.0.0.1}/metrics")
+dbSyncMetricsAddr=$(askDefault " Metrics address for cardano-db-sync" "${autoDbSyncMetricsAddr/0.0.0.0/127.0.0.1}")
+dbSyncMetricsPort=$(askDefault " Metrics port for cardano-db-sync" "${autoDbSyncMetricsPort}")
 echo ""
 
-echo "Cardano Submit API and Ogmios environment"
+echo "Cardano Submit API  and Ogmios environments"
 submitApiUrl=$(askDefault " Listen address and port for cardano-submit-api" "${autoSubmitApiUrl/0.0.0.0/127.0.0.1}")
 ogmiosUrl=$(askDefault " Listen address and port for Ogmios" "${autoOgmiosUrl/0.0.0.0/127.0.0.1}")
 echo ""
@@ -56,6 +60,11 @@ echo "Working: Cloning koios-artifacts into /tmp"
 sudo rm -Rf /tmp/koios-artifacts && \
 git clone -q https://github.com/cardano-community/koios-artifacts.git /tmp/koios-artifacts
 cmdStatus "Success: Cloned koios-artifacts into /tmp"
+
+echo "Working: Cloning guild-operators into /tmp"
+sudo rm -Rf /tmp/guild-operators && \
+git clone -q https://github.com/cardano-community/guild-operators.git /tmp/guild-operators
+cmdStatus "Success: Cloned guild-operators into /tmp"
 
 sudo mkdir -p $grestConfigPath && \
 sudo cp $scriptDir/files/grest.conf $grestConfigPath && \
@@ -149,7 +158,14 @@ find /usr/local/bin/koios/ -type f -exec sudo sed -i "s/^PROM_URL=.*/PROM_URL=${
 find /usr/local/bin/koios/ -type f -exec sudo sed -i "s/^EPOCH_LENGTH=.*/EPOCH_LENGTH=432000/g" {} \; && \
 find /usr/local/bin/koios/ -type f -exec sudo sed -i "s/^export CARDANO_NODE_SOCKET_PATH=.*/export CARDANO_NODE_SOCKET_PATH=${cardanoSocketPath//\//\\\/}/g" {} \; && \
 sudo cp $scriptDir/systemd/* /etc/systemd/system/ && \
-sudo systemctl daemon-reload && sudo systemctl enable --now koios@{2,5,10,15,120}.timer &>/dev/null
+sudo cp $scriptDir/files/get-metrics.sh /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\. .*/\. \/usr\/local\/bin\/koios\/\.env/" /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\#DBSYNC_PROM_HOST=.*/DBSYNC_PROM_HOST=\"${dbSyncMetricsAddr}\"/" /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\#DBSYNC_PROM_PORT=.*/DBSYNC_PROM_PORT=${dbSyncMetricsPort}/" /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\#PGDATABASE=.*/PGDATABASE=${grestPostgresDb}/" /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\#PGUSER=.*/PGUSER=${grestPostgresRole}/" /usr/local/bin/koios/get-metrics.sh && \
+sudo sed -i "s/^\#NODE_PROM_URL=.*/NODE_PROM_URL=\"${cardanoMetricsUrl//\//\\\/}\"/" /usr/local/bin/koios/get-metrics.sh && \
+sudo systemctl daemon-reload && sudo systemctl enable --now koios@{2,5,10,15,120}.timer grest-exporter.service &>/dev/null
 cmdStatus "Success: Installed scripts and started systemd timers"
 
 sudo systemctl restart postgrest haproxy
@@ -158,7 +174,7 @@ cmdStatus "Success: Restarted PostgREST and HAProxy"
 echo "
 Last but not least, please make sure that:
 
+ - Ports 8053 (or 8453) for HAProxy and 8059 for grest-exporter.sh are opened on your firewall
  - PostgreSQL, DB-Sync, PostgREST, HAProxy, Submit-API and Ogmios are started and enabled
- - Port 8053 for HAProxy is opened on your firewall and reachable from the internet
  - The command 'sudo -u $grestPostgresRole psql $grestPostgresDb' works (db-updates via systemd)
 "

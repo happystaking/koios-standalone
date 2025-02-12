@@ -1,0 +1,20 @@
+[Unit]
+Description=gRest Services Metrics Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+User=postgrest
+WorkingDirectory=/tmp
+ExecStart=/bin/bash -l -c "exec /usr/local/bin/koios/grest-exporter.sh"
+KillSignal=SIGINT
+SuccessExitStatus=143
+SyslogIdentifier=grest-exporter
+TimeoutStopSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
