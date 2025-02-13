@@ -60,6 +60,10 @@ echo "Working: Cloning koios-artifacts into /tmp"
 sudo rm -Rf /tmp/koios-artifacts && \
 git clone -q https://github.com/cardano-community/koios-artifacts.git /tmp/koios-artifacts
 cmdStatus "Success: Cloned koios-artifacts into /tmp"
+cd /tmp/koios-artifacts && koiosGitTag=$(git tag | sort -hr | head -n 1) && \
+git checkout tags/$koiosGitTag &>/dev/null && koiosGitSha=$(git log | head -n 1 | awk '{print $2}') && \
+cd $scriptDir
+cmdStatus "Success: Checked out latest Koios version ($koiosGitTag)"
 
 echo "Working: Cloning guild-operators into /tmp"
 sudo rm -Rf /tmp/guild-operators && \
@@ -142,7 +146,8 @@ psql $grestPostgresDb -q -c "set client_min_messages to warning;" \
     -c "select grest.epoch_info_cache_update();" \
     -c "select grest.active_stake_cache_update_check();" \
     -c "call grest.update_stake_distribution_cache();" \
-    -c "select grest.pool_history_cache_update();" 1>/dev/null
+    -c "select grest.pool_history_cache_update();" \
+    -c "select grest.update_control_table('version', '$koiosGitTag', '[$koiosGitSha]');" 1>/dev/null
 cmdStatus "Success: Populated cache tables in grest schema"
 
 sudo mkdir -p /usr/local/bin/koios && \
