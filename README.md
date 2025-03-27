@@ -14,4 +14,4 @@ There are several assumptions and pre-conditions:
  - You intend to run this script for mainnet (testnets are not supported)
  - You are using the [`db-sync-config.json`](https://raw.githubusercontent.com/cardano-community/guild-operators/refs/heads/alpha/files/configs/mainnet/db-sync-config.json) from the [guild-operators](https://github.com/cardano-community/guild-operators) repository
 
-Run `setup.sh` to start the configuration on your system.
+The versioning of koios-standalone matches the Koios versioning, so just check out the version you need and run `setup.sh` to start the configuration on your system.

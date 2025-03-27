@@ -1,0 +1,6 @@
+[Unit]
+Description=Koios Pool Groups Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/koios/pool-groups-update.sh

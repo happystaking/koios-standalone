@@ -47,7 +47,7 @@ grestConfigPath=$(askDefault " PostgREST config dir" "/etc/postgrest")
 grestSystemUser=$(askDefault " PostgREST system user" "postgrest")
 grestPostgresRole=$(askDefault " PostgREST psql role" "postgrest")
 grestPostgresDb=$(askDefault " PostgREST database name" "cexplorer")
-grestInstallPgBech32=$(askConfirmation " Install pg_bech32 and create extension in grest?")
+grestInstallPgCardano=$(askConfirmation " Install pg_cardano and create extension in grest?")
 echo ""
 
 echo "HAProxy configuration"
@@ -79,33 +79,25 @@ sudo chown $grestSystemUser $grestConfigPath/main.conf && \
 sudo chmod 0600 $grestConfigPath/main.conf
 cmdStatus "Success: Installed $grestConfigPath/main.conf"
 
+if [[ $grestInstallPgCardano -eq 1 ]];
+then
+    echo "Working: Downloading and extracting pg_cardano into /tmp"
+    sudo rm -Rf /tmp/pg_cardano && \
+    cd /tmp && curl -sL https://github.com/cardano-community/pg_cardano/releases/download/v1.0.5-p1/pg_cardano_linux_x64_v1.0.5-p1.tar.gz | tar zxf -
+    cmdStatus "Success: Extracted pg_cardano into /tmp"
+
+    echo "Working: Installing pg_cardano..."
+    /tmp/pg_cardano/install.sh &>/dev/null
+    cmdStatus "Success: Installed pg_cardano"
+
+    psql $grestPostgresDb -c "drop extension if exists pg_cardano" &>/dev/null && \
+    psql $grestPostgresDb -c "create extension pg_cardano" &>/dev/null
+    cmdStatus "Success: Created extension pg_cardano"
+fi
+
 sqlBasics=$(cat /tmp/koios-artifacts/files/grest/rpc/db-scripts/basics.sql)
 psql $grestPostgresDb -c "${sqlBasics//authenticator/"$grestPostgresRole"}" &>/dev/null
 cmdStatus "Success: Created grest schemas in $grestPostgresDb"
-
-if [[ $grestInstallPgBech32 -eq 1 ]];
-then
-    echo "Installing build tools, libbech32 and pg_bech32... "
-    sudo apt install -y --no-install-recommends build-essential make g++ autoconf autoconf-archive automake libtool pkg-config postgresql-server-dev-all &>/dev/null
-    cmdStatus "Success: Installed build tools"
-
-    mkdir -p ~/src && rm -Rf ~/src/libbech32 && \
-    git clone -q https://github.com/whitslack/libbech32.git ~/src/libbech32 && \
-    cd ~/src/libbech32 && mkdir -p build-aux/m4 && \
-    curl -sf https://raw.githubusercontent.com/NixOS/patchelf/master/m4/ax_cxx_compile_stdcxx.m4 -o build-aux/m4/ax_cxx_compile_stdcx.m4 && \
-    autoreconf -i && ./configure >/dev/null && make >/dev/null && \
-    sudo make install >/dev/null && sudo ldconfig >/dev/null
-    cmdStatus "Success: Installed libbech32"
-
-    rm -Rf ~/src/pg_bech32 && \
-    git clone -q https://github.com/cardano-community/pg_bech32.git ~/src/pg_bech32 && \
-    cd ~/src/pg_bech32 && make >/dev/null && sudo make install >/dev/null
-    cmdStatus "Success: Installed pg_bech32"
-
-    psql $grestPostgresDb -c "drop extension if exists pg_bech32" >/dev/null && \
-    psql $grestPostgresDb -c "create extension pg_bech32" >/dev/null
-    cmdStatus "Success: Created extension pg_bech_32"
-fi
 
 sudo mkdir -p $haProxyConfigPath && \
 sudo cp $scriptDir/files/haproxy.conf $haProxyConfigPath && \
@@ -164,13 +156,14 @@ find /usr/local/bin/koios/ -type f -exec sudo sed -i "s/^EPOCH_LENGTH=.*/EPOCH_L
 find /usr/local/bin/koios/ -type f -exec sudo sed -i "s/^export CARDANO_NODE_SOCKET_PATH=.*/export CARDANO_NODE_SOCKET_PATH=${cardanoSocketPath//\//\\\/}/g" {} \; && \
 sudo cp $scriptDir/systemd/* /etc/systemd/system/ && \
 sudo cp $scriptDir/files/get-metrics.sh /usr/local/bin/koios/get-metrics.sh && \
+sudo cp $scriptDir/files/grest-exporter.sh /usr/local/bin/koios/grest-exporter.sh && \
 sudo sed -i "s/^\. .*/\. \/usr\/local\/bin\/koios\/\.env/" /usr/local/bin/koios/get-metrics.sh && \
 sudo sed -i "s/^\#DBSYNC_PROM_HOST=.*/DBSYNC_PROM_HOST=\"${dbSyncMetricsAddr}\"/" /usr/local/bin/koios/get-metrics.sh && \
 sudo sed -i "s/^\#DBSYNC_PROM_PORT=.*/DBSYNC_PROM_PORT=${dbSyncMetricsPort}/" /usr/local/bin/koios/get-metrics.sh && \
 sudo sed -i "s/^\#PGDATABASE=.*/PGDATABASE=${grestPostgresDb}/" /usr/local/bin/koios/get-metrics.sh && \
 sudo sed -i "s/^\#PGUSER=.*/PGUSER=${grestPostgresRole}/" /usr/local/bin/koios/get-metrics.sh && \
 sudo sed -i "s/^\#NODE_PROM_URL=.*/NODE_PROM_URL=\"${cardanoMetricsUrl//\//\\\/}\"/" /usr/local/bin/koios/get-metrics.sh && \
-sudo systemctl daemon-reload && sudo systemctl enable --now koios@{2,5,10,15,120}.timer grest-exporter.service &>/dev/null
+sudo systemctl daemon-reload && sudo systemctl enable --now koios@{2,5,10,15,120,720}.timer grest-exporter.service &>/dev/null
 cmdStatus "Success: Installed scripts and started systemd timers"
 
 sudo systemctl restart postgrest haproxy
@@ -182,4 +175,6 @@ Last but not least, please make sure that:
  - Ports 8053 (or 8453) for HAProxy and 8059 for grest-exporter.sh are opened on your firewall
  - PostgreSQL, DB-Sync, PostgREST, HAProxy, Submit-API and Ogmios are started and enabled
  - The command 'sudo -u $grestPostgresRole psql $grestPostgresDb' works (db-updates via systemd)
+ - It's recommended to use HAProxy in conjunction with TLS on port 8453:
+   https://cardano-community.github.io/guild-operators/Build/grest
 "
